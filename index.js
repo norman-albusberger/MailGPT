@@ -33,7 +33,7 @@ function run(input, parameters) {
         var response = Mail.displayDialog(
             mailSubject + '\n\n'
             + truncate(mailContent, 350)
-            + "\nPlease enter how this mail should be answered:",
+            + "\n\nPlease enter how this mail should be answered:",
             {
                 defaultAnswer: "",
                 buttons: ["Cancel", "OK"],
