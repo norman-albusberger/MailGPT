@@ -24,18 +24,20 @@ function run(input, parameters) {
 
     var userInput = "";
     while (userInput.trim() === "") {
-        var response = Mail.displayDialog("Please enter how this mail should be answered:", {
-            defaultAnswer: "",
-            buttons: ["Cancel", "OK"],
-            defaultButton: "OK"
-        });
-
-        if (response.buttonReturned === "Cancel") {
-            // Handle the cancel action
-            console.log("User pressed Cancel.");
-            return; // Exit the loop and function if "Cancel" was pressed
+        try {
+            var response = Mail.displayDialog(mailSubject + "\nPlease enter how this mail should be answered:", {
+                defaultAnswer: "",
+                buttons: ["Cancel", "OK"],
+                defaultButton: "OK",
+            });
+            if (response.buttonReturned === "Cancel") {
+                break;
+                return; // Exit the loop and function if "Cancel" was pressed
+            }
+        } catch (error) {
+            dialogTimeOut = true;
+            break;
         }
-
         userInput = response.textReturned;
     }
 
@@ -58,7 +60,7 @@ function run(input, parameters) {
     var requestDataString = JSON.stringify(JSON.stringify(requestData));
 
     // Prepare and execute the curl command
-    var curlCommand = 'curl https://api.openai.com/v1/chat/compvarions' +
+    var curlCommand = 'curl https://api.openai.com/v1/chat/completions' +
         ' -H "Content-Type: application/json"' +
         ' -H "Authorization: Bearer ' + apiKey + '"' +
         ' -d ' + requestDataString;
@@ -77,7 +79,7 @@ function processChatGptResponse(responseString) {
         // Parse the response string into a JSON object
         var responseJson = JSON.parse(responseString);
 
-        if (responseJson.error!==undefined) {
+        if (responseJson.error !== undefined) {
             Mail.displayDialog(responseJson.error.message, {buttons: ["OK"]});
             return false;
         }
