@@ -9,12 +9,17 @@ console.log = function (logMessage) {
     app.doShellScript("echo '" + logMessage + "' >> ~/logfile.txt");
 };
 
+//custom truncate function
+function truncate(str, n) {
+    return (str.length > n) ? str.slice(0, n - 1) + '...' : str;
+}
+
 function run(input, parameters) {
     Application("Mail").includeStandardAdditions = true;
     const Mail = Application("Mail");
     const selectedMessages = Mail.selection();
     if (selectedMessages.length === 0) {
-        Mail.displayDialog("Erst eine Email auswählen, auf die geantwortet werden soll", {buttons: ["OK"]});
+        Mail.displayDialog("Select a mail first.", {buttons: ["OK"]});
         return;
     }
 
@@ -23,53 +28,56 @@ function run(input, parameters) {
     var mailSubject = selectedMail.subject();
 
     var userInput = "";
+    var canceled = false;
     while (userInput.trim() === "") {
-        try {
-            var response = Mail.displayDialog(mailSubject + "\nPlease enter how this mail should be answered:", {
+        var response = Mail.displayDialog(
+            mailSubject + '\n\n'
+            + truncate(mailContent, 350)
+            + "\nPlease enter how this mail should be answered:",
+            {
                 defaultAnswer: "",
                 buttons: ["Cancel", "OK"],
                 defaultButton: "OK",
             });
-            if (response.buttonReturned === "Cancel") {
-                break;
-                return; // Exit the loop and function if "Cancel" was pressed
-            }
-        } catch (error) {
-            dialogTimeOut = true;
+
+        if (response.buttonReturned === "Cancel") {
+            canceled = true;
             break;
+            return; // Exit the loop and function if "Cancel" was pressed
         }
         userInput = response.textReturned;
     }
+    if (!canceled) {
+        var additionalInstructions = "Instructions: " + userInput;
 
-    var additionalInstructions = "Instructions: " + userInput;
+        // Prepare the data for the ChatGPT API
+        var requestData = {
+            model: "gpt-3.5-turbo",
+            messages: [
+                {
+                    role: "system",
+                    content: "You will be provided with an email message and instructions. You are an assistant who answers emails as if the recipient were answering them, taking the instructions into account. You must use the language of the given mail."
+                },
+                {
+                    role: "user",
+                    content: ": Subject: " + mailSubject + "\n" + "Body: " + mailContent + "\n" + additionalInstructions
+                }
+            ]
+        };
+        var requestDataString = JSON.stringify(JSON.stringify(requestData));
 
-    // Prepare the data for the ChatGPT API
-    var requestData = {
-        model: "gpt-3.5-turbo",
-        messages: [
-            {
-                role: "system",
-                content: "You will be provided with an email message and instructions. Your task is to answer this email according to the instructions. Use the language of the given email."
-            },
-            {
-                role: "user",
-                content: ": Subject: " + mailSubject + "\n" + "Body: " + mailContent + "\n" + additionalInstructions
-            }
-        ]
-    };
-    var requestDataString = JSON.stringify(JSON.stringify(requestData));
+        // Prepare and execute the curl command
+        var curlCommand = 'curl https://api.openai.com/v1/chat/completions' +
+            ' -H "Content-Type: application/json"' +
+            ' -H "Authorization: Bearer ' + apiKey + '"' +
+            ' -d ' + requestDataString;
 
-    // Prepare and execute the curl command
-    var curlCommand = 'curl https://api.openai.com/v1/chat/completions' +
-        ' -H "Content-Type: application/json"' +
-        ' -H "Authorization: Bearer ' + apiKey + '"' +
-        ' -d ' + requestDataString;
+        app.includeStandardAdditions = true; // This line is essential to enable shell scripting
+        var result = app.doShellScript(curlCommand);
 
-    app.includeStandardAdditions = true; // This line is essential to enable shell scripting
-    var result = app.doShellScript(curlCommand);
-
-    //creating the response mail
-    return createReplyWithEmailContent(selectedMail, processChatGptResponse(result));
+        //creating the response mail
+        return createReplyWithEmailContent(selectedMail, processChatGptResponse(result));
+    }
 
 }
 
