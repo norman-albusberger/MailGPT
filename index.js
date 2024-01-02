@@ -14,6 +14,7 @@ function truncate(str, n) {
     return (str.length > n) ? str.slice(0, n - 1) + '...' : str;
 }
 
+
 function run(input, parameters) {
     Application("Mail").includeStandardAdditions = true;
     const Mail = Application("Mail");
@@ -121,7 +122,7 @@ function createReplyWithEmailContent(originalEmail, replyContent) {
 //retrieving the API key for ChatGPT by the user
 function getOrSetApiKey() {
     var accountName = app.doShellScript('whoami');
-    var keychainScript = 'security find-generic-password -a "' + accountName + '" -s "OpenAI API Key" -w';
+    var keychainScript = 'security find-generic-password -a "' + accountName + '" -s "EmailMate-API-Key" -w';
     var apiKey;
     try {
         // Try to retrieve the API key from Keychain
@@ -133,10 +134,11 @@ function getOrSetApiKey() {
         }).textReturned;
 
         // Store the API key in Keychain for future use
-        var addKeychainScript = 'security add-generic-password -a"' + accountName + '" -s "OpenAI API Key" -w ' + apiKey;
+        var addKeychainScript = 'security add-generic-password -a"' + accountName + '" -s "EmailMate-API-Key" -w ' + apiKey;
         app.doShellScript(addKeychainScript);
     }
     return apiKey;
 }
+
 
 

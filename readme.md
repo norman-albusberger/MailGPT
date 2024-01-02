@@ -25,16 +25,14 @@ This script is designed to enhance the functionality of the macOS Mail applicati
     - The key is securely stored in the macOS Keychain for subsequent uses.
 
 ### Configuring in Mail
-- For Quick Actions: The feature can be accessed via the right-click context menu in the Mail app.
-- For Applications: Run the Automator application independently whenever needed.
+- For Quick Actions: The feature can be accessed via the top bar menu entry "Mail".
 
 ## Usage
 1. **Select an Email**: In the Mail app, select the email you want to respond to.
 2. **Run the Script**:
-    - For Quick Actions: Right-click the selected email, navigate to `Services`, and select the created Quick Action.
-    - For Applications: Run the application, and it will process the currently selected email in Mail.
+    - For Quick Actions: Click Mail in the top bar, navigate to `Services`, and select the created Quick Action.
 3. **Add Instructions (Optional)**: Enter any additional instructions or context to help tailor the AI response.
-4. **Generate and Use Response**: The script interacts with ChatGPT to generate a response, which you can then use to reply to the email.
+4. **Generate and Use Response**: The script interacts with ChatGPT to generate a response, which is uses as mail body in a response email.
 
 ## Security and Privacy
 - This script does not store email contents or additional inputs.
