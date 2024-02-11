@@ -1,0 +1,304 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<key>AMApplicationBuild</key>
+	<string>521.1</string>
+	<key>AMApplicationVersion</key>
+	<string>2.10</string>
+	<key>AMDocumentVersion</key>
+	<string>2</string>
+	<key>actions</key>
+	<array>
+		<dict>
+			<key>action</key>
+			<dict>
+				<key>AMAccepts</key>
+				<dict>
+					<key>Container</key>
+					<string>List</string>
+					<key>Optional</key>
+					<true/>
+					<key>Types</key>
+					<array>
+						<string>com.apple.applescript.object</string>
+					</array>
+				</dict>
+				<key>AMActionVersion</key>
+				<string>1.0</string>
+				<key>AMApplication</key>
+				<array>
+					<string>Automator</string>
+				</array>
+				<key>AMParameterProperties</key>
+				<dict>
+					<key>source</key>
+					<dict/>
+				</dict>
+				<key>AMProvides</key>
+				<dict>
+					<key>Container</key>
+					<string>List</string>
+					<key>Types</key>
+					<array>
+						<string>com.apple.applescript.object</string>
+					</array>
+				</dict>
+				<key>ActionBundlePath</key>
+				<string>/System/Library/Automator/Run JavaScript.action</string>
+				<key>ActionName</key>
+				<string>JavaScript ausführen</string>
+				<key>ActionParameters</key>
+				<dict>
+					<key>source</key>
+					<string>const app = Application.currentApplication();
+app.includeStandardAdditions = true;
+const apiKey = getOrSetApiKey();
+
+//custom log function since console.log is not working in the automator environment
+console.log = function (logMessage) {
+    var app = Application.currentApplication();
+    app.includeStandardAdditions = true;
+    app.doShellScript("echo '" + logMessage + "' &gt;&gt; ~/logfile.txt");
+};
+
+//custom truncate function
+function truncate(str, n) {
+    return (str.length &gt; n) ? str.slice(0, n - 1) + '...' : str;
+}
+
+
+function run(input, parameters) {
+    Application("Mail").includeStandardAdditions = true;
+    const Mail = Application("Mail");
+    const selectedMessages = Mail.selection();
+    if (selectedMessages.length === 0) {
+        Mail.displayDialog("Select a mail first.", {buttons: ["OK"]});
+        return;
+    }
+
+    const selectedMail = selectedMessages[0];
+    var mailContent = selectedMail.content();
+    var mailSubject = selectedMail.subject();
+
+    var userInput = "";
+    var canceled = false;
+    while (userInput.trim() === "") {
+        var response = Mail.displayDialog(
+            mailSubject + '\n\n'
+            + truncate(mailContent, 350)
+            + "\n\nPlease enter how this mail should be answered:",
+            {
+                defaultAnswer: "",
+                buttons: ["Cancel", "OK"],
+                defaultButton: "OK",
+            });
+
+        if (response.buttonReturned === "Cancel") {
+            canceled = true;
+            break;
+            return; // Exit the loop and function if "Cancel" was pressed
+        }
+        userInput = response.textReturned;
+    }
+    if (!canceled) {
+        var additionalInstructions = "Instructions: " + userInput;
+
+        // Prepare the data for the ChatGPT API
+        var requestData = {
+            model: "gpt-3.5-turbo",
+            messages: [
+                {
+                    role: "system",
+                    content: "You will be provided with an email message and instructions. You are an assistant who answers emails as if the recipient were answering them, taking the instructions into account. You must use the language of the given mail."
+                },
+                {
+                    role: "user",
+                    content: ": Subject: " + mailSubject + "\n" + "Body: " + mailContent + "\n" + additionalInstructions
+                }
+            ]
+        };
+        var requestDataString = JSON.stringify(JSON.stringify(requestData));
+
+        // Prepare and execute the curl command
+        var curlCommand = 'curl https://api.openai.com/v1/chat/completions' +
+            ' -H "Content-Type: application/json"' +
+            ' -H "Authorization: Bearer ' + apiKey + '"' +
+            ' -d ' + requestDataString;
+
+        app.includeStandardAdditions = true; // This line is essential to enable shell scripting
+        var result = app.doShellScript(curlCommand);
+
+        //creating the response mail
+        return createReplyWithEmailContent(selectedMail, processChatGptResponse(result));
+    }
+
+}
+
+function processChatGptResponse(responseString) {
+    const Mail = Application("Mail");
+    try {
+        // Parse the response string into a JSON object
+        var responseJson = JSON.parse(responseString);
+
+        if (responseJson.error !== undefined) {
+            Mail.displayDialog(responseJson.error.message, {buttons: ["OK"]});
+            return false;
+        }
+        // Extract the content of the assistant's message
+        return responseJson.choices[0].message.content;
+    } catch (error) {
+        // Handle any parsing errors
+        return "Error processing response: " + error;
+    }
+}
+
+function createReplyWithEmailContent(originalEmail, replyContent) {
+    const Mail = Application("Mail");
+    const replyEmail = Mail.OutgoingMessage().make();
+    replyEmail.subject = "Re: " + originalEmail.subject();
+    replyEmail.content = replyContent;
+    replyEmail.visible = true;
+
+    const recipients = originalEmail.sender(); // Assuming you want to reply to the sender
+    replyEmail.toRecipients.push(Mail.Recipient({address: recipients}));
+
+    // Set the original email as the reply-to email
+    replyEmail.messageId = originalEmail.messageId();
+    replyEmail.inReplyTo = originalEmail.messageId();
+
+    // Open the email in Mail for editing/sending
+    Mail.activate();
+    replyEmail.open();
+}
+
+//retrieving the API key for ChatGPT by the user
+function getOrSetApiKey() {
+    var accountName = app.doShellScript('whoami');
+    var keychainScript = 'security find-generic-password -a "' + accountName + '" -s "EmailMate-API-Key" -w';
+    var apiKey;
+    try {
+        // Try to retrieve the API key from Keychain
+        apiKey = app.doShellScript(keychainScript);
+    } catch (error) {
+        // If not found, prompt the user to enter the API key
+        apiKey = app.displayDialog('OpenAI API-Key eingeben für ' + accountName + ':', {
+            defaultAnswer: ''
+        }).textReturned;
+
+        // Store the API key in Keychain for future use
+        var addKeychainScript = 'security add-generic-password -a"' + accountName + '" -s "EmailMate-API-Key" -w ' + apiKey;
+        app.doShellScript(addKeychainScript);
+    }
+    return apiKey;
+}
+
+
+
+</string>
+				</dict>
+				<key>BundleIdentifier</key>
+				<string>com.apple.Automator.RunJavaScript</string>
+				<key>CFBundleVersion</key>
+				<string>1.0</string>
+				<key>CanShowSelectedItemsWhenRun</key>
+				<false/>
+				<key>CanShowWhenRun</key>
+				<true/>
+				<key>Category</key>
+				<array>
+					<string>AMCategoryUtilities</string>
+				</array>
+				<key>Class Name</key>
+				<string>RunJavaScriptAction</string>
+				<key>InputUUID</key>
+				<string>A2F4EF75-E444-47A6-8A40-68F9ABE1E087</string>
+				<key>Keywords</key>
+				<array>
+					<string>Ausführen</string>
+					<string>JavaScript</string>
+				</array>
+				<key>OutputUUID</key>
+				<string>324102E5-EAD6-45B9-96D9-D6B561539C10</string>
+				<key>UUID</key>
+				<string>EDA85224-8A89-4505-AA3F-20F14B83C869</string>
+				<key>UnlocalizedApplications</key>
+				<array>
+					<string>Automator</string>
+				</array>
+				<key>arguments</key>
+				<dict>
+					<key>0</key>
+					<dict>
+						<key>default value</key>
+						<string>function run(input, parameters) {
+	
+	// Your script goes here
+
+	return input;
+}</string>
+						<key>name</key>
+						<string>source</string>
+						<key>required</key>
+						<string>0</string>
+						<key>type</key>
+						<string>0</string>
+						<key>uuid</key>
+						<string>0</string>
+					</dict>
+				</dict>
+				<key>isViewVisible</key>
+				<integer>1</integer>
+				<key>location</key>
+				<string>571.000000:925.000000</string>
+				<key>nibPath</key>
+				<string>/System/Library/Automator/Run JavaScript.action/Contents/Resources/Base.lproj/main.nib</string>
+			</dict>
+			<key>isViewVisible</key>
+			<integer>1</integer>
+		</dict>
+	</array>
+	<key>connectors</key>
+	<dict/>
+	<key>workflowMetaData</key>
+	<dict>
+		<key>applicationBundleID</key>
+		<string>com.apple.mail</string>
+		<key>applicationBundleIDsByPath</key>
+		<dict>
+			<key>/System/Applications/Mail.app</key>
+			<string>com.apple.mail</string>
+		</dict>
+		<key>applicationPath</key>
+		<string>/System/Applications/Mail.app</string>
+		<key>applicationPaths</key>
+		<array>
+			<string>/System/Applications/Mail.app</string>
+		</array>
+		<key>inputTypeIdentifier</key>
+		<string>com.apple.Automator.nothing</string>
+		<key>outputTypeIdentifier</key>
+		<string>com.apple.Automator.nothing</string>
+		<key>presentationMode</key>
+		<integer>11</integer>
+		<key>processesInput</key>
+		<integer>0</integer>
+		<key>serviceApplicationBundleID</key>
+		<string>com.apple.mail</string>
+		<key>serviceApplicationPath</key>
+		<string>/System/Applications/Mail.app</string>
+		<key>serviceInputTypeIdentifier</key>
+		<string>com.apple.Automator.nothing</string>
+		<key>serviceOutputTypeIdentifier</key>
+		<string>com.apple.Automator.nothing</string>
+		<key>serviceProcessesInput</key>
+		<integer>0</integer>
+		<key>systemImageName</key>
+		<string>NSActionTemplate</string>
+		<key>useAutomaticInputType</key>
+		<integer>1</integer>
+		<key>workflowTypeIdentifier</key>
+		<string>com.apple.Automator.servicesMenu</string>
+	</dict>
+</dict>
+</plist>
