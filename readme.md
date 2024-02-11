@@ -10,6 +10,10 @@ This script is designed to enhance the functionality of the macOS Mail applicati
 - **Ease of Use**: Integrated into the Mail app as a Quick Action or as a standalone Automator application.
 
 ## Setup
+### Update
+
+Now you can easily install the workflow file ``EmailMate-reply.workflow`` as it is already packed to install by double click. After this you will find the EmailMate-reply function in the top bar menu "Mail->Services".
+
 ### Prerequisites
 - macOS with Mail application
 - OpenAI API key
